@@ -1,0 +1,4 @@
+# Client demo dependencies.
+requests>=2.31.0
+# SOCKS support (PySocks) — required only when routing over Tor with --onion/--socks.
+requests[socks]>=2.31.0

@@ -1,0 +1,14 @@
+# Compose-specific torrc.
+#
+# Same as ../config/torrc, but HiddenServicePort forwards to the `nginx` service
+# by name (Docker network) instead of 127.0.0.1. On first start the tor daemon
+# generates the onion-service keys into /var/lib/tor/onion_api (the persistent
+# `tor_data` volume) — those keys are SECRET and are never committed.
+# This file itself contains NO secrets — safe to commit.
+
+HiddenServiceDir /var/lib/tor/onion_api
+HiddenServiceVersion 3
+HiddenServicePort 80 nginx:8080
+
+# Server-only node: it does not need to act as a SOCKS client, so disable SocksPort.
+SocksPort 0

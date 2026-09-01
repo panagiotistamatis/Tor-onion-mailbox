@@ -1,0 +1,24 @@
+# ---- Source material / bundles (kept out of the public repo) ----
+_source/
+Tor Browser/
+*.zip
+
+# ---- Python ----
+.venv/
+__pycache__/
+*.pyc
+
+# ---- SECRETS: Tor onion service private/public keys and hostname ----
+# The private key IS the onion service identity. Never commit it.
+hs_ed25519_secret_key
+hs_ed25519_public_key
+hostname
+
+# ---- SECRETS: client authorization keys ----
+*.auth_private
+authorized_clients/*.auth
+onion_auth/
+
+# ---- SECRETS: generic key/cert material ----
+*.pem
+*.key

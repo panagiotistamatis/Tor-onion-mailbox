@@ -1,0 +1,22 @@
+# Tor v3 Onion Service configuration
+# Deploy the relevant lines into /etc/tor/torrc (Debian/Ubuntu) and reload tor.
+#
+# Traffic path:
+#   Tor :80  ->  nginx 127.0.0.1:8080  ->  uvicorn/FastAPI 127.0.0.1:8000
+#
+# On first start, the tor daemon creates <HiddenServiceDir>/hostname containing
+# the public .onion address, plus the service's private keys. Those keys are
+# SECRET and must never leave the server or be committed to version control.
+
+HiddenServiceDir /var/lib/tor/onion_api
+HiddenServiceVersion 3
+HiddenServicePort 80 127.0.0.1:8080
+
+# Require Tor v3 client authorization: only clients whose PUBLIC x25519 key is
+# present in <HiddenServiceDir>/authorized_clients/*.auth may reach the service.
+# (Uncomment on the server; the daemon refuses to start if the directory or the
+#  .auth files do not have owner-only 0600 permissions.)
+# HiddenServiceDir already implies authorized_clients/ is read for v3 auth.
+
+# SOCKS proxy used by local clients to dial .onion addresses.
+SocksPort 9050

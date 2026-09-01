@@ -1,0 +1,87 @@
+# Local-reproducibility stack for the Tor Onion Mailbox service.
+#
+# PURPOSE
+#   This Compose file lets you run the full api + nginx + tor chain locally to
+#   experiment with the design. It is NOT a production deployment. The canonical
+#   deployment is bare-metal Debian/Kali via scripts/setup.sh.
+#
+# SECRETS
+#   No onion-service private keys and no .onion address are committed to this
+#   repo. The tor service generates fresh keys at runtime into the named volume
+#   `tor_data`. Treat that volume as secret; it is never baked into an image.
+#
+# NGINX UPSTREAM NUANCE
+#   The committed config/nginx/onion_api.conf uses `proxy_pass http://127.0.0.1:8000`
+#   because on bare metal nginx and the app share the same host (loopback).
+#   Inside Compose, however, the app runs in a separate container reachable by its
+#   service name, so nginx must target `api:8000` instead of `127.0.0.1:8000`.
+#   Rather than editing the committed bare-metal config, this stack mounts small
+#   Compose-specific overrides that are provided in this directory:
+#     - nginx.compose.conf  (upstream -> api:8000)
+#     - torrc.compose       (HiddenServicePort -> nginx:8080)
+#   Both contain NO secrets and are committed, so `docker compose up --build`
+#   brings the whole chain up with no extra setup.
+
+services:
+  # ---- FastAPI application ----------------------------------------------------
+  api:
+    build:
+      context: ..                     # repo root, so Dockerfile can COPY app/
+      dockerfile: docker/Dockerfile
+    # No `ports:` mapping on purpose: the app is reachable only from the internal
+    # network (by nginx), never from the host. This mirrors the loopback-only
+    # bind used on bare metal.
+    expose:
+      - "8000"
+    networks:
+      - onion_net
+    restart: unless-stopped
+
+  # ---- nginx reverse proxy ----------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      - api
+    networks:
+      - onion_net
+    # Mounts the provided Compose override (upstream -> api:8000) as the active
+    # server block. See docker/nginx.compose.conf.
+    volumes:
+      - ./nginx.compose.conf:/etc/nginx/conf.d/default.conf:ro
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  # ---- Tor onion service ------------------------------------------------------
+  # Uses the official Debian tor package on a slim base. On first start tor reads
+  # the mounted torrc, generates the onion-service keys into /var/lib/tor (the
+  # persistent `tor_data` volume), and forwards the onion :80 port to nginx:8080.
+  #
+  # NOTE: the committed config/torrc points HiddenServicePort at 127.0.0.1:8080,
+  # which is correct for bare metal. For Compose, tor reaches nginx by service
+  # name, so the provided torrc.compose (with `HiddenServicePort 80 nginx:8080`)
+  # is mounted instead. The generated onion keys live in the `tor_data` volume and
+  # are never committed. The api + nginx pair also works standalone for API-level
+  # testing if you prefer to run without tor.
+  tor:
+    image: debian:stable-slim
+    depends_on:
+      - nginx
+    command: >
+      sh -c "apt-get update &&
+             apt-get install -y --no-install-recommends tor &&
+             cp /etc/torrc.custom /etc/tor/torrc &&
+             exec tor -f /etc/tor/torrc"
+    volumes:
+      - ./torrc.compose:/etc/torrc.custom:ro   # Compose torrc (HiddenServicePort -> nginx:8080)
+      - tor_data:/var/lib/tor                    # persists generated keys (SECRET, not committed)
+    networks:
+      - onion_net
+    restart: unless-stopped
+
+networks:
+  onion_net:
+    driver: bridge
+
+volumes:
+  tor_data:      # holds runtime-generated onion keys; never commit its contents
